@@ -5,13 +5,22 @@
 package io.flutter.plugins.webviewflutter;
 
 import android.annotation.TargetApi;
+import android.app.Activity;
 import android.content.Context;
 import android.hardware.display.DisplayManager;
 import android.os.Build;
 import android.os.Handler;
+import android.util.Log;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
+import android.webkit.WebChromeClient;
 import android.webkit.WebStorage;
+import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
+
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
@@ -28,6 +37,8 @@ public class FlutterWebView implements PlatformView, MethodCallHandler {
   private final MethodChannel methodChannel;
   private final FlutterWebViewClient flutterWebViewClient;
   private final Handler platformThreadHandler;
+  private Activity activity;
+  private final MyWebChromeClient mWebChromeClient;
 
   @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
   @SuppressWarnings("unchecked")
@@ -53,6 +64,9 @@ public class FlutterWebView implements PlatformView, MethodCallHandler {
     methodChannel = new MethodChannel(messenger, "plugins.flutter.io/webview_" + id);
     methodChannel.setMethodCallHandler(this);
 
+    mWebChromeClient = new MyWebChromeClient(webView);
+    mWebChromeClient.setActivity(activity);
+    webView.setWebChromeClient(mWebChromeClient);
     flutterWebViewClient = new FlutterWebViewClient(methodChannel);
     applySettings((Map<String, Object>) params.get("settings"));
 
@@ -71,6 +85,73 @@ public class FlutterWebView implements PlatformView, MethodCallHandler {
     }
   }
 
+  public void setActivity(Activity activity) {
+    this.activity = activity;
+    mWebChromeClient.setActivity(activity);
+
+  }
+
+  private static class MyWebChromeClient extends WebChromeClient {
+    private View mCustomView;
+    private CustomViewCallback mCustomViewCallback;
+    private WebView webview;
+    private int normalSystemUiVisibility;
+    private  Activity activity ;
+
+    public void setActivity(Activity activity) {
+      this.activity = activity;
+    }
+
+    public MyWebChromeClient(WebView webview) {
+      this.webview = webview;
+    }
+
+    @Override
+    public void onShowCustomView(View view, CustomViewCallback callback) {
+      Log.d("webviewtest", "onShowCustomView: activity :" + (activity == null));
+      if (mCustomView != null || activity == null) {
+        onHideCustomView();
+        return;
+      }
+      mCustomView = view;
+      mCustomView.setBackgroundColor(0xff000000);
+      mCustomViewCallback = callback;
+      FrameLayout decorView = (FrameLayout)activity.getWindow().getDecorView();
+      normalSystemUiVisibility = decorView.getWindowSystemUiVisibility();
+      Log.d("webviewtest", "show normalSystemUiVisibility: " + normalSystemUiVisibility);
+      decorView.addView(this.mCustomView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+      webview.setVisibility(View.GONE);
+      decorView.setSystemUiVisibility(
+              View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                      // Set the content to appear under the system bars so that the
+                      // content doesn't resize when the system bars hide and show.
+                      | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                      | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                      | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                      // Hide the nav bar and status bar
+                      | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                      | View.SYSTEM_UI_FLAG_FULLSCREEN);
+      super.onShowCustomView(view, callback);
+    }
+
+    public void onHideCustomView() {
+      Log.d("webviewtest", "onHideCustomView: ");
+      webview.setVisibility(View.VISIBLE);
+      if (mCustomView == null  ||activity == null) {
+        return;
+      }
+
+      mCustomView.setVisibility(View.GONE);
+
+      FrameLayout decorView = (FrameLayout) activity.getWindow().getDecorView();
+      decorView.removeView(mCustomView);
+      mCustomViewCallback.onCustomViewHidden();
+      mCustomView = null;
+      super.onHideCustomView();
+      decorView.setSystemUiVisibility(normalSystemUiVisibility);
+      Log.d("webviewtest", "hide normalSystemUiVisibility: " + decorView.getSystemUiVisibility());
+    }
+  }
   @Override
   public View getView() {
     return webView;

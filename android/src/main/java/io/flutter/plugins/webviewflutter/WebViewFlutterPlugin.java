@@ -4,7 +4,12 @@
 
 package io.flutter.plugins.webviewflutter;
 
+import android.app.Activity;
+import android.util.Log;
+
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
+import io.flutter.embedding.engine.plugins.activity.ActivityAware;
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.PluginRegistry.Registrar;
 
@@ -16,9 +21,10 @@ import io.flutter.plugin.common.PluginRegistry.Registrar;
  * <p>Call {@link #registerWith(Registrar)} to use the stable {@code io.flutter.plugin.common}
  * package instead.
  */
-public class WebViewFlutterPlugin implements FlutterPlugin {
+public class WebViewFlutterPlugin implements FlutterPlugin,ActivityAware  {
 
   private FlutterCookieManager flutterCookieManager;
+  private WebViewFactory mPlatformViewFactory;
 
   /**
    * Add an instance of this to {@link io.flutter.embedding.engine.plugins.PluginRegistry} to
@@ -42,6 +48,7 @@ public class WebViewFlutterPlugin implements FlutterPlugin {
    * won't react to changes in activity or context, unlike {@link CameraPlugin}.
    */
   public static void registerWith(Registrar registrar) {
+    Log.d("webviewtest", "registerWith");
     registrar
         .platformViewRegistry()
         .registerViewFactory(
@@ -53,22 +60,49 @@ public class WebViewFlutterPlugin implements FlutterPlugin {
   @Override
   public void onAttachedToEngine(FlutterPluginBinding binding) {
     BinaryMessenger messenger = binding.getBinaryMessenger();
+    Log.d("webviewtest", "onAttachedToEngine");
+    mPlatformViewFactory = new WebViewFactory(messenger, /*containerView=*/ null);
     binding
         .getFlutterEngine()
         .getPlatformViewsController()
         .getRegistry()
         .registerViewFactory(
-            "plugins.flutter.io/webview", new WebViewFactory(messenger, /*containerView=*/ null));
+            "plugins.flutter.io/webview", mPlatformViewFactory);
     flutterCookieManager = new FlutterCookieManager(messenger);
   }
 
   @Override
   public void onDetachedFromEngine(FlutterPluginBinding binding) {
+    Log.d("webviewtest", "onDetachedFromEngine: ");
     if (flutterCookieManager == null) {
       return;
     }
 
     flutterCookieManager.dispose();
     flutterCookieManager = null;
+  }
+
+  @Override
+  public void onAttachedToActivity(ActivityPluginBinding activityPluginBinding) {
+    Activity activity = activityPluginBinding.getActivity();
+    Log.d("webviewtest", "onAttachedToActivity: " +(activity == null));
+    if (mPlatformViewFactory != null && activity !=null) {
+      mPlatformViewFactory.setActivity(activity);
+    }
+  }
+
+  @Override
+  public void onDetachedFromActivityForConfigChanges() {
+
+  }
+
+  @Override
+  public void onReattachedToActivityForConfigChanges(ActivityPluginBinding activityPluginBinding) {
+
+  }
+
+  @Override
+  public void onDetachedFromActivity() {
+    Log.d("webviewtest", "onDetachedFromActivity: ");
   }
 }
